@@ -15,11 +15,6 @@ import numpy as np
 import zipfile
 import logging
 
-mlflow.keras.autolog()
-
-logging.basicConfig(level=logging.WARN)
-logger = logging.getLogger(__name__)
-
 
 def unzip_and_load(zipfolder, filename):
     """
@@ -29,8 +24,6 @@ def unzip_and_load(zipfolder, filename):
     :return: raw_data
         Raw data set
     """
-    # unzip folder
-
     with zipfile.ZipFile(zipfolder, 'r') as zip_ref:
         zip_ref.extractall()
 
@@ -72,9 +65,16 @@ def clean_data(data, drop_cols, fill_cols):
     # drop
     data = data.drop(labels=drop_cols, axis=1)
 
-    # fill
-    for col in fill_cols:
-        data[col].fillna(data['Age'].mean(), inplace=True)
+    # zero to nan
+    data['Fare'] = data['Fare'].replace(0, np.nan)
+
+    # fill Fare
+    data['Fare'] = data.groupby(['Pclass', 'Sex'])['Fare'] \
+        .transform(lambda x: x.fillna(x.mean()))
+
+    # fill Age
+    data['Age'] = data.groupby(['Pclass', 'Sex'])['Age'] \
+        .transform(lambda x: x.fillna(x.mean()))
 
     print('data set shape: ', data.shape, '\n')
     print(data.head())
@@ -214,55 +214,77 @@ def train_model(network, data, labels, batch_size, epochs,
 
 
 if __name__ == "__main__":
-    warnings.filterwarnings("ignore")
-    np.random.seed(40)
+    with mlflow.start_run():
+        mlflow.keras.autolog()
 
-    # unzip and  loadinf
-    zipfolder = './titanic.zip'
-    filename = 'train.csv'
-    raw_train = unzip_and_load(zipfolder, filename)
+        logging.basicConfig(level=logging.WARN)
+        logger = logging.getLogger(__name__)
 
-    # cleaning
-    drop_cols = ['PassengerId', 'Name', 'Ticket', 'Cabin', 'Embarked']
-    fill_cols = ['Age', 'Fare']
-    train = clean_data(raw_train, drop_cols, fill_cols)
+        warnings.filterwarnings("ignore")
+        np.random.seed(40)
 
-    # transform object to categorical to float
-    obj_cols = train.select_dtypes(include='object').columns.to_list()
-    print('object columns: ', obj_cols)
+        # unzip and  loadinf
+        zipfolder = sys.argv[2] if len(sys.argv) > 2 else './titanic.zip'
+        # zipfolder = './titanic.zip'
+        filename = 'train.csv'
+        raw_train = unzip_and_load(zipfolder, filename)
 
-    for i in train.select_dtypes(include='object').columns.to_list():
-        train[i] = train[i].astype('category')
+        # cleaning
+        drop_cols = ['PassengerId', 'Name', 'Ticket', 'Cabin', 'Embarked']
+        fill_cols = ['Age', 'Fare']
+        train = clean_data(raw_train, drop_cols, fill_cols)
 
-    cater_cols = train.select_dtypes(include='category').columns.to_list()
-    print('categorical columns: ', cater_cols)
+        # transform object to categorical to float
+        obj_cols = train.select_dtypes(include='object').columns.to_list()
+        print('object columns: ', obj_cols)
 
-    train['Sex'].replace(['female', 'male'], [0, 1], inplace=True)
+        for i in train.select_dtypes(include='object').columns.to_list():
+            train[i] = train[i].astype('category')
 
-    # split into input (X) and label (Y) variables
-    data_cols = ['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare']
-    label_col = ['Survived']
-    X_train = train[data_cols].astype(float)
-    Y_train = train[label_col]
+        cater_cols = train.select_dtypes(include='category').columns.to_list()
+        print('categorical columns: ', cater_cols)
 
-    # build model
-    model = build_model(6, [128, 128, 1],
-                        ['relu', 'relu', 'sigmoid'],
-                        0, 1)
-    model.summary()
+        train['Sex'].replace(['female', 'male'], [0, 1], inplace=True)
 
-    # model optimizer
-    alpha = float(sys.argv[1]) if len(sys.argv) > 1 else 0.001
+        # split into input (X) and label (Y) variables
+        data_cols = ['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare']
+        label_col = ['Survived']
+        X_train = train[data_cols].astype(float)
+        Y_train = train[label_col]
 
-    beta1 = 0.95
-    beta2 = 0.8
-    optimize_model(model, alpha, beta1, beta2)
+        # build model
+        model = build_model(6, [128, 128, 1],
+                            ['relu', 'relu', 'sigmoid'],
+                            0, 1)
+        model.summary()
 
-    # training
-    batch_size = 128
-    epochs = 300
+        # model optimizer
+        alpha = 0.005
+        beta1 = 0.95
+        beta2 = 0.8
+        optimize_model(model, alpha, beta1, beta2)
+
+        # training
+        batch_size = 128
+
+        mode = sys.argv[1] if len(sys.argv) > 1 else 'standard'
+        if mode == 'debug':
+            epochs = 1
+        else:
+            epochs = 300
+
+    validation_split = 0.1
+
     train_model(model, X_train, Y_train, batch_size, epochs,
                 early_stopping=True,
                 patience=10, learning_rate_decay=False, alpha=alpha,
                 save_best=True, filepath='network.h5', shuffle=True,
-                validation_split=0.15)
+                validation_split=validation_split)
+
+    # validation metrics
+    print('\nValidation metrics')
+    split_at = int(len(X_train) * (1 - validation_split))
+    X_val = X_train[split_at:]
+    Y_val = Y_train[split_at:]
+
+    print('[val_loss, val_accuracy]', model.evaluate(X_val, Y_val))

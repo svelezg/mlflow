@@ -1,0 +1,11 @@
+name: titanic
+
+conda_env: conda.yaml
+
+entry_points:
+  main:
+    parameters:
+      mode: {type: string, default: standard}
+      path: string
+    command: "python train.py {mode}
+                    {path}"
