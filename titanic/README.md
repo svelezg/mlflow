@@ -2,7 +2,7 @@
 
 ## Authors
 * **Solution:** Santiago Vélez G. [svelez.velezgarcia@gmail.com](svelez.velezgarcia@gmail.com) [@svelezg](https://github.com/svelezg)
-* **Problem statement:** Christian García
+* **Problem statement:** Cristian García
 
 
 ## Requirements
@@ -27,7 +27,7 @@ You can run the project from the directory using default path and mode as follow
 
 Or use other values for path and mode by passing them as arguments to train.py:
 
-    python titanic/train.py <path> <mode>
+    python titanic/train.py <mode> <path>
 
 
 ### Comparing the Models
@@ -40,7 +40,7 @@ and view it at [http://localhost:5000]([http://localhost:5000])
 ### Run using conda environment
 To run this project, invoke 
 
-    mlflow run . -P path='./' mode='standard' 
+    mlflow run . -P mode='standard' path='./'
 
 After running this command, MLflow runs the training code in a new Conda environment with the 
 dependencies specified in conda.yaml.
@@ -50,7 +50,7 @@ dependencies specified in conda.yaml.
 
 To deploy the server, run (replace the path with your model’s actual path):
     
-    mlflow models serve -m ./mlruns/0/62e739c7071b48e2a3c675e20a1b372c/artifacts/model
+    mlflow models serve -m ./mlruns/0/0ebaeea841b44fd6b5e5d5a63195fc90/artifacts/model
 
 
 Once you have deployed the server, you can pass it some sample data and see the predictions. 
